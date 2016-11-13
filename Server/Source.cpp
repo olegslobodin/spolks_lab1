@@ -113,16 +113,20 @@ void CommandCycle(int clientIndex, vector<int>* clientSockets, vector<sockaddr_i
 {
 	char* buffer = (char*)calloc(BUFFER_SIZE, 1);
 	int currentClientSocket = (*clientSockets)[clientIndex];
+	bool breakCycle = false;
 
-	while (true)
+	while (!breakCycle)
 	{
 		InputCommand(buffer, currentClientSocket);
 		while (HasCommand(buffer))
 		{
 			string cmd = TakeNextCommand(buffer);
-			cout << cmd;
+			cout << cmd << endl;
 			if (ProceedCommand(cmd, clientIndex, clientSockets, clientSocketsParams) != 0)
+			{
+				breakCycle = true;
 				break;
+			}
 		}
 	}
 	free(buffer);
@@ -184,6 +188,10 @@ int ProceedCommand(string cmd, int clientIndex, vector<int>* clientSockets, vect
 	{
 		CloseConnection(clientIndex, clientSockets, clientSocketsParams);
 		return SHUTDOWN_SOCKET;
+	}
+	else
+	{
+		Send("Command not found!", currentClientSocket);
 	}
 
 	return 0;
