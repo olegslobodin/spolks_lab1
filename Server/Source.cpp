@@ -72,7 +72,7 @@ sockaddr_in GetServerSocketParams() {
     sockaddr_in sin;
 
     sin.sin_addr.s_addr = INADDR_ANY;
-    sin.sin_port = htons(80);
+    sin.sin_port = htons(10000);
     sin.sin_family = AF_INET;
 
     return sin;
