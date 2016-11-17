@@ -240,7 +240,8 @@ void PrintLastError() {
                    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 256, NULL)
     wcout << buf;
 #elif defined __linux__
-    cout << strerror(errno);
+    int error = errno;
+    cout << strerror(error);
 #endif
 }
 
