@@ -98,7 +98,7 @@ void ConnectClient(int serverSocket, vector<int> *clientSockets, vector<sockaddr
     sockaddr_in clientSocketParams;
 
 #if  defined _WIN32 || defined _WIN64
-    sockaddr_in clientSocketParams;
+	int fromlen = sizeof(clientSocketParams);
 #elif defined __linux__
     socklen_t fromlen = sizeof(clientSocketParams);
 #endif
@@ -236,8 +236,8 @@ string GetTime() {
 void PrintLastError() {
 #if  defined _WIN32 || defined _WIN64
     wchar_t buf[256];
-    FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(),
-                   MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 256, NULL)
+	FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(),
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 256, NULL);
     wcout << buf;
 #elif defined __linux__
     int error = errno;
