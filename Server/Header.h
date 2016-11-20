@@ -31,6 +31,18 @@
 
 using namespace std;
 
+struct Client
+{
+	int Socket;
+	sockaddr_in SocketParams;
+
+	Client(int socket, sockaddr_in socketParams)
+	{
+		Socket = socket;
+		SocketParams = socketParams;
+	}
+};
+
 int ConfirmWinSocksDll();
 
 void InitServerSocket(int *serverSocket);
@@ -39,9 +51,9 @@ sockaddr_in GetServerSocketParams();
 
 void Work(int serverSocket);
 
-void ConnectClient(int serverSocket, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams);
+void ConnectClient(int serverSocket, vector<Client> *clients);
 
-void CommandCycle(int clientIndex, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams);
+void CommandCycle(int clientIndex, vector<Client> *clients);
 
 void InputCommand(char *recvBuffer, int clientSocket);
 
@@ -49,11 +61,11 @@ bool HasCommand(char *buffer);
 
 string TakeNextCommand(char *buffer);
 
-int ProceedCommand(string cmd, int clientIndex, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams);
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients);
 
 string CutLineEndings(char *cmd);
 
-void CloseConnection(int clientIndex, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams);
+void CloseConnection(int clientIndex, vector<Client> *clients);
 
 void Send(string str, int socket);
 

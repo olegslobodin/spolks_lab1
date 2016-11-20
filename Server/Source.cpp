@@ -79,22 +79,21 @@ sockaddr_in GetServerSocketParams() {
 }
 
 void Work(int serverSocket) {
-    vector<int> *clientSockets = new vector<int>;
-    vector<sockaddr_in> *clientSocketsParams = new vector<sockaddr_in>;
+    vector<Client> *clients = new vector<Client>;
 
     while (true) {
-        ConnectClient(serverSocket, clientSockets, clientSocketsParams);
-        for (vector<int>::iterator clientSocket = clientSockets->begin();
-             clientSocket != clientSockets->end(); clientSocket++) {
-            int clientSocketIndex = clientSocket - clientSockets->begin();
-            CommandCycle(clientSocketIndex, clientSockets, clientSocketsParams);
-            if (clientSockets->size() == 0)
+        ConnectClient(serverSocket, clients);
+        for (vector<Client>::iterator client = clients->begin();
+             client != clients->end(); client++) {
+            int clientIndex = client - clients->begin();
+            CommandCycle(clientIndex, clients);
+            if (clients->size() == 0)
                 break;
         }
     }
 }
 
-void ConnectClient(int serverSocket, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams) {
+void ConnectClient(int serverSocket, vector<Client> *clients) {
     sockaddr_in clientSocketParams;
 
 #if  defined _WIN32 || defined _WIN64
@@ -109,25 +108,25 @@ void ConnectClient(int serverSocket, vector<int> *clientSockets, vector<sockaddr
         return;
     }
 
-    clientSockets->push_back(newClientSocket);
-    clientSocketsParams->push_back(clientSocketParams);
+	Client newClient(newClientSocket, clientSocketParams);
+
+    clients->push_back(newClient);
 
     Send("Connection established!", newClientSocket);
     printf("accepted connection from %s, port %d\n", inet_ntoa(clientSocketParams.sin_addr),
            htons(clientSocketParams.sin_port));
 }
 
-void CommandCycle(int clientIndex, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams) {
+void CommandCycle(int clientIndex, vector<Client> *clients) {
     char *buffer = (char *) calloc(BUFFER_SIZE, 1);
-    int currentClientSocket = (*clientSockets)[clientIndex];
     bool breakCycle = false;
 
     while (!breakCycle) {
-        InputCommand(buffer, currentClientSocket);
+        InputCommand(buffer, (*clients)[clientIndex].Socket);
         while (HasCommand(buffer)) {
             string cmd = TakeNextCommand(buffer);
             cout << cmd << endl;
-            if (ProceedCommand(cmd, clientIndex, clientSockets, clientSocketsParams) != 0) {
+            if (ProceedCommand(cmd, clientIndex, clients) != 0) {
                 breakCycle = true;
                 break;
             }
@@ -165,9 +164,9 @@ string TakeNextCommand(char *buffer) {
     return cmd;
 }
 
-int ProceedCommand(string cmd, int clientIndex, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams) {
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
     vector<string> words = split(cmd, ' ');
-    int currentClientSocket = (*clientSockets)[clientIndex];
+    int currentClientSocket = (*clients)[clientIndex].Socket;
 
     if (words.empty()) {
         return 0;
@@ -180,7 +179,7 @@ int ProceedCommand(string cmd, int clientIndex, vector<int> *clientSockets, vect
         Send(GetTime(), currentClientSocket);
 
     else if (words[0].compare("close") == 0) {
-        CloseConnection(clientIndex, clientSockets, clientSocketsParams);
+        CloseConnection(clientIndex, clients);
         return SHUTDOWN_SOCKET;
     } else {
         Send("Command not found!", currentClientSocket);
@@ -197,17 +196,16 @@ string CutLineEndings(char *cmd) {
     return line;
 }
 
-void CloseConnection(int clientIndex, vector<int> *clientSockets, vector<sockaddr_in> *clientSocketsParams) {
-    int currentClientSocket = (*clientSockets)[clientIndex];
-    sockaddr_in currentClientSocketParams = (*clientSocketsParams)[clientIndex];
+void CloseConnection(int clientIndex, vector<Client> *clients) {
+    int currentClientSocket = (*clients)[clientIndex].Socket;
+    sockaddr_in currentClientSocketParams = (*clients)[clientIndex].SocketParams;
 
     Send("Good bye!", currentClientSocket);
     printf("Connection closed with %s, port %d\n", inet_ntoa(currentClientSocketParams.sin_addr),
            htons(currentClientSocketParams.sin_port));
     shutdown(currentClientSocket, SD_BOTH);
 
-    clientSockets->erase(clientSockets->begin() + clientIndex);
-    clientSocketsParams->erase(clientSocketsParams->begin() + clientIndex);
+    clients->erase(clients->begin() + clientIndex);
 }
 
 void Send(string str, int socket) {
