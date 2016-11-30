@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <string.h>
 #include <sstream>
@@ -33,13 +34,22 @@ using namespace std;
 
 struct Client
 {
+	static const int BUFFER_SIZE = 1000;
+
 	int Socket;
 	sockaddr_in SocketParams;
+	char *Buffer;
 
 	Client(int socket, sockaddr_in socketParams)
 	{
 		Socket = socket;
 		SocketParams = socketParams;
+		Buffer = (char *)calloc(BUFFER_SIZE, 1);
+	}
+
+	void Dispose()
+	{
+		free(Buffer);
 	}
 };
 
@@ -63,7 +73,9 @@ string TakeNextCommand(char *buffer);
 
 int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients);
 
-string CutLineEndings(char *cmd);
+void ReceiveFile(int socket, string fileName);
+
+bool Contains(char *buffer, int bufferLength, const char *substring);
 
 void CloseConnection(int clientIndex, vector<Client> *clients);
 
