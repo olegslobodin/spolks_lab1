@@ -4,6 +4,8 @@ const int SHUTDOWN_SOCKET = 2;
 const int FILE_BUFFER_SIZE = 10 * 1024 * 1024;
 const char *END_OF_FILE = "File sent 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_SEND_ERROR = "File send error 8bb20328-3a19-4db8-b138-073a48f57f4a";
+const char *FILE_NOT_FOUND = "File is not found 8bb20328-3a19-4db8-b138-073a48f57f4a";
+const char *STORE_PATH_WINDOWS = "../debug/store/";
 
 int main() {
 	int serverSocket;
@@ -187,8 +189,12 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 		if (words.size() > 1) {
 			ReceiveFile(currentClientSocket, words[1]);
 		}
-		else {
-			Send("Please specify a file name", currentClientSocket);
+	}
+
+	else if (words[0].compare("receive") == 0)
+	{
+		if (words.size() > 1) {
+			SendFile(currentClientSocket, words[1]);
 		}
 	}
 
@@ -206,7 +212,7 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 
 void ReceiveFile(int socket, string fileName) {
 	ofstream file;
-	file.open("../debug/store/" + fileName, ios::binary);
+	file.open(STORE_PATH_WINDOWS + fileName, ios::binary);
 
 	if (file.is_open()) {
 		Send("ready", socket);
@@ -244,6 +250,40 @@ void ReceiveFile(int socket, string fileName) {
 	free(fileBuffer);
 	file.close();
 	cout << endl << "Receiving complete" << endl;
+}
+
+void SendFile(int socket, string fileName)
+{
+	ifstream file;
+	file.open(STORE_PATH_WINDOWS + fileName, ios::binary);
+	if (!file.is_open()) {
+		Send(FILE_NOT_FOUND, socket);
+		return;
+	}
+
+	char *fileBuffer = (char*)calloc(FILE_BUFFER_SIZE, 1);
+	unsigned long long pos = 0, length = 0;
+	file.seekg(0, ios::end);
+	unsigned long long fileSize = file.tellg();
+	file.seekg(0, ios::beg);
+
+	do {
+		if (fileSize - pos < FILE_BUFFER_SIZE)
+			length = fileSize - pos;
+		else
+			length = FILE_BUFFER_SIZE;
+		file.read(fileBuffer, length);
+		cout << "\r" << file.tellg() << " bytes read";
+		pos = file.tellg();
+		if (length > 0)
+			send(socket, fileBuffer, length, 0);
+	} while (length > 0);
+	file.close();
+
+	Send(END_OF_FILE, socket);
+
+	free(fileBuffer);
+	cout << endl << "Sending complete" << endl;
 }
 
 bool Contains(char *buffer, int bufferLength, const char *substring)

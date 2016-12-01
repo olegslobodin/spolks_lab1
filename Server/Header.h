@@ -75,6 +75,8 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients);
 
 void ReceiveFile(int socket, string fileName);
 
+void SendFile(int socket, string fileName);
+
 bool Contains(char *buffer, int bufferLength, const char *substring);
 
 void CloseConnection(int clientIndex, vector<Client> *clients);
