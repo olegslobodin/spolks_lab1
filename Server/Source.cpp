@@ -206,7 +206,7 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 
 void ReceiveFile(int socket, string fileName) {
 	ofstream file;
-	file.open("D:\\Projects\\C++, C#\\spolks_lab1\\Debug\\" + fileName, ios::binary);
+	file.open("../debug/store/" + fileName, ios::binary);
 
 	if (file.is_open()) {
 		Send("ready", socket);
