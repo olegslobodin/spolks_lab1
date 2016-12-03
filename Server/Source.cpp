@@ -5,7 +5,12 @@ const int FILE_BUFFER_SIZE = 10 * 1024 * 1024;
 const char *END_OF_FILE = "File sent 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_SEND_ERROR = "File send error 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_NOT_FOUND = "File is not found 8bb20328-3a19-4db8-b138-073a48f57f4a";
-const char *STORE_PATH_WINDOWS = "../debug/store/";
+
+#if  defined _WIN32 || defined _WIN64
+const char *STORE_PATH = "../debug/store/";
+#elif defined __linux__
+const char *STORE_PATH = "./store/";
+#endif
 
 int main() {
 	int serverSocket;
@@ -212,7 +217,7 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 
 void ReceiveFile(int socket, string fileName) {
 	ofstream file;
-	file.open(STORE_PATH_WINDOWS + fileName, ios::binary);
+	file.open(STORE_PATH + fileName, ios::binary);
 
 	if (file.is_open()) {
 		Send("ready", socket);
@@ -255,7 +260,7 @@ void ReceiveFile(int socket, string fileName) {
 void SendFile(int socket, string fileName)
 {
 	ifstream file;
-	file.open(STORE_PATH_WINDOWS + fileName, ios::binary);
+	file.open(STORE_PATH + fileName, ios::binary);
 	if (!file.is_open()) {
 		Send(FILE_NOT_FOUND, socket);
 		return;
