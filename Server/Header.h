@@ -77,11 +77,13 @@ void ReceiveFile(int socket, string fileName);
 
 void SendFile(int socket, string fileName);
 
+int SendSerial(int socket, const char* buffer, int length, int flags);
+
 bool Contains(char *buffer, int bufferLength, const char *substring);
 
 void CloseConnection(int clientIndex, vector<Client> *clients);
 
-void Send(string str, int socket);
+void SendString(string str, int socket);
 
 string GetTime();
 

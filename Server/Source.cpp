@@ -1,7 +1,9 @@
 #include "Header.h"
 
 const int SHUTDOWN_SOCKET = 2;
+const int MAX_FLAG_STRING_LENGTH = 60;
 const int FILE_BUFFER_SIZE = 10 * 1024 * 1024;
+const int TRANSFER_BLOCK_SIZE = 10 * 1024 * 1024 - 2 * MAX_FLAG_STRING_LENGTH; // - 2*MAX_... to avoid receive buffer overflow
 const char *END_OF_FILE = "File sent 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_SEND_ERROR = "File send error 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_NOT_FOUND = "File is not found 8bb20328-3a19-4db8-b138-073a48f57f4a";
@@ -116,7 +118,7 @@ void ConnectClient(int serverSocket, vector<Client> *clients) {
 
 	clients->push_back(newClient);
 
-	Send("Connection established!", newClientSocket);
+	SendString("Connection established!\n", newClientSocket);
 	printf("accepted connection from %s, port %d\n", inet_ntoa(clientSocketParams.sin_addr),
 		htons(clientSocketParams.sin_port));
 }
@@ -177,11 +179,11 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 
 	if (words[0].compare("echo") == 0) {
 		if (cmd.length() > 5)
-			Send(cmd.substr(5), currentClientSocket);
+			SendString(cmd.substr(5) + '\n', currentClientSocket);
 	}
 
 	else if (words[0].compare("time") == 0) {
-		Send(GetTime(), currentClientSocket);
+		SendString(GetTime() + '\n', currentClientSocket);
 	}
 
 	else if (words[0].compare("send") == 0)
@@ -204,7 +206,7 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 	}
 
 	else {
-		Send("Command not found!", currentClientSocket);
+		SendString("Command not found!\n", currentClientSocket);
 	}
 
 	return 0;
@@ -215,10 +217,10 @@ void ReceiveFile(int socket, string fileName) {
 	file.open(STORE_PATH_WINDOWS + fileName, ios::binary);
 
 	if (file.is_open()) {
-		Send("ready", socket);
+		SendString("ready\n", socket);
 	}
 	else {
-		Send("Can't open file for writing on server side. Error #" + errno, socket);
+		SendString("Can't open file for writing on server side. Error #" + errno + '\n', socket);
 		return;
 	}
 
@@ -230,16 +232,16 @@ void ReceiveFile(int socket, string fileName) {
 	{
 		unsigned long long recievedBytesCount = recv(socket, fileBuffer, FILE_BUFFER_SIZE, 0);
 		if (Contains(fileBuffer, recievedBytesCount, END_OF_FILE)) {
-			Send("File sent successfully\n", socket);
+			SendString("File sent successfully\n", socket);
 			sendingComplete = true;
 			recievedBytesCount -= strlen(END_OF_FILE);
 		}
 		if (Contains(fileBuffer, recievedBytesCount, FILE_SEND_ERROR)) {
-			Send("File sending was aborted\n", socket);
+			SendString("File sending was aborted\n", socket);
 			break;
 		}
 		else if (recievedBytesCount == SOCKET_ERROR) {
-			Send("Can't receive file on server side. Error #" + errno + '\n', socket);
+			SendString("Can't receive file on server side. Error #" + errno + '\n', socket);
 			PrintLastError();
 			break;
 		}
@@ -257,21 +259,21 @@ void SendFile(int socket, string fileName)
 	ifstream file;
 	file.open(STORE_PATH_WINDOWS + fileName, ios::binary);
 	if (!file.is_open()) {
-		Send(FILE_NOT_FOUND, socket);
+		SendString(FILE_NOT_FOUND, socket);
 		return;
 	}
 
-	char *fileBuffer = (char*)calloc(FILE_BUFFER_SIZE, 1);
+	char *fileBuffer = (char*)calloc(TRANSFER_BLOCK_SIZE, 1);
 	unsigned long long pos = 0, length = 0;
 	file.seekg(0, ios::end);
 	unsigned long long fileSize = file.tellg();
 	file.seekg(0, ios::beg);
 
 	do {
-		if (fileSize - pos < FILE_BUFFER_SIZE)
+		if (fileSize - pos < TRANSFER_BLOCK_SIZE)
 			length = fileSize - pos;
 		else
-			length = FILE_BUFFER_SIZE;
+			length = TRANSFER_BLOCK_SIZE;
 		file.read(fileBuffer, length);
 		cout << "\r" << file.tellg() << " bytes read";
 		pos = file.tellg();
@@ -280,11 +282,19 @@ void SendFile(int socket, string fileName)
 	} while (length > 0);
 	file.close();
 
-	Send(END_OF_FILE, socket);
+	SendString(END_OF_FILE, socket);
 
 	free(fileBuffer);
-	cout << endl << "Sending complete" << endl;
+	cout << endl << "Sending complete\n" << endl;
 }
+
+//int SendSerial(int socket, const char* buffer, int length, int flags)
+//{
+//	for (int i = 0; i < length; i++)
+//		if (send(socket, buffer + i, 1, flags) == SOCKET_ERROR)
+//			return SOCKET_ERROR;
+//	return 0;
+//}
 
 bool Contains(char *buffer, int bufferLength, const char *substring)
 {
@@ -307,7 +317,7 @@ void CloseConnection(int clientIndex, vector<Client> *clients) {
 	int currentClientSocket = (*clients)[clientIndex].Socket;
 	sockaddr_in currentClientSocketParams = (*clients)[clientIndex].SocketParams;
 
-	Send("Good bye!", currentClientSocket);
+	SendString("Good bye!\n", currentClientSocket);
 	printf("Connection closed with %s, port %d\n", inet_ntoa(currentClientSocketParams.sin_addr),
 		htons(currentClientSocketParams.sin_port));
 	shutdown(currentClientSocket, SD_BOTH);
@@ -316,7 +326,7 @@ void CloseConnection(int clientIndex, vector<Client> *clients) {
 	clients->erase(clients->begin() + clientIndex);
 }
 
-void Send(string str, int socket) {
+void SendString(string str, int socket) {
 	int bufSize = str.length();
 	char *buf = (char *)calloc(bufSize + 1, 1);
 	strcpy(buf, str.c_str());
