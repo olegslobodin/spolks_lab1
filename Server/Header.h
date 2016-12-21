@@ -75,11 +75,13 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients);
 
 void ReceiveFile(int socket, string fileName);
 
+bool Contains(char *buffer, int bufferLength, const char *substring);
+
+int Pos(char *buffer, int bufferLength, const char *substring);
+
 void SendFile(int socket, string fileName);
 
 int SendSerial(int socket, const char* buffer, int length, int flags);
-
-bool Contains(char *buffer, int bufferLength, const char *substring);
 
 void CloseConnection(int clientIndex, vector<Client> *clients);
 
@@ -94,3 +96,5 @@ void split(const string &s, char delim, vector<string> &elems);
 vector<string> split(const string &s, char delim);
 
 vector<string> split(char *char_string, char delim);
+
+void MyStrcpy(char* dest, char* source, int length);
