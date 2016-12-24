@@ -65,13 +65,19 @@ void ConnectClient(int serverSocket, vector<Client> *clients);
 
 void CommandCycle(int clientIndex, vector<Client> *clients);
 
+void CommandCycleUDP(int serverSocket);
+
 void InputCommand(char *recvBuffer, int clientSocket);
+
+sockaddr InputCommandUDP(char *buffer, int clientSocket);
 
 bool HasCommand(char *buffer);
 
 string TakeNextCommand(char *buffer);
 
-int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients);
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *clientAddrUDP = NULL);
+
+int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *clientAddrUDP);
 
 void ReceiveFile(int socket, string fileName);
 
@@ -85,7 +91,7 @@ int SendSerial(int socket, const char* buffer, int length, int flags);
 
 void CloseConnection(int clientIndex, vector<Client> *clients);
 
-void SendString(string str, int socket);
+void SendString(string str, int socket, sockaddr *clientAddrUDP = NULL);
 
 string GetTime();
 

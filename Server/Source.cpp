@@ -7,6 +7,7 @@ const int TRANSFER_BLOCK_SIZE = 10 * 1024 * 1024 - 2 * MAX_FLAG_STRING_LENGTH; /
 const char *END_OF_FILE = "File sent 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_SEND_ERROR = "File send error 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_NOT_FOUND = "File is not found 8bb20328-3a19-4db8-b138-073a48f57f4a";
+const bool UDP = false;
 
 #if  defined _WIN32 || defined _WIN64
 const char *STORE_PATH = "../debug/store/";
@@ -53,7 +54,10 @@ int ConfirmWinSocksDll() {
 #endif
 
 void InitServerSocket(int *serverSocket) {
-	*serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (UDP)
+		*serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
+	else
+		*serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (*serverSocket == SOCKET_ERROR) {
 		PrintLastError();
 		return;
@@ -92,14 +96,18 @@ sockaddr_in GetServerSocketParams() {
 void Work(int serverSocket) {
 	vector<Client> *clients = new vector<Client>;
 
-	while (true) {
-		ConnectClient(serverSocket, clients);
-		for (vector<Client>::iterator client = clients->begin();
-			client != clients->end(); client++) {
-			int clientIndex = client - clients->begin();
-			CommandCycle(clientIndex, clients);
-			if (clients->size() == 0)
-				break;
+	if (UDP)
+		CommandCycleUDP(serverSocket);
+	else {
+		while (true) {
+			ConnectClient(serverSocket, clients);
+			for (vector<Client>::iterator client = clients->begin();
+				client != clients->end(); client++) {
+				int clientIndex = client - clients->begin();
+				CommandCycle(clientIndex, clients);
+				if (clients->size() == 0)
+					break;
+			}
 		}
 	}
 }
@@ -145,6 +153,23 @@ void CommandCycle(int clientIndex, vector<Client> *clients) {
 	}
 }
 
+void CommandCycleUDP(int serverSocket) {
+	bool breakCycle = false;
+	char* buffer = (char *)calloc(Client::BUFFER_SIZE, 1);
+
+	while (!breakCycle) {
+		sockaddr clientAddr = InputCommandUDP(buffer, serverSocket);
+		while (HasCommand(buffer)) {
+			string cmd = TakeNextCommand(buffer);
+			cout << cmd << endl;
+			if (ProceedCommandUDP(cmd, serverSocket, &clientAddr) != 0) {
+				breakCycle = true;
+				break;
+			}
+		}
+	}
+}
+
 void InputCommand(char *buffer, int clientSocket) {
 	//find position of line ending
 	char *currentPos = strchr(buffer, '\0');
@@ -158,6 +183,24 @@ void InputCommand(char *buffer, int clientSocket) {
 	}
 	currentPos += bytesRecieved;
 	*currentPos = '\0';
+}
+
+sockaddr InputCommandUDP(char *buffer, int clientSocket) {
+	//find position of line ending
+	char *currentPos = strchr(buffer, '\0');
+	if (currentPos == NULL)
+		currentPos = buffer;
+	sockaddr clientAddr;
+	int fromLen = sizeof clientAddr;
+
+	int bytesRecieved = recvfrom(clientSocket, currentPos, Client::BUFFER_SIZE - (currentPos - buffer), 0, &clientAddr, &fromLen);
+	if (bytesRecieved == SOCKET_ERROR) {
+		buffer[0] = '\0';
+		return *(new sockaddr);
+	}
+	currentPos += bytesRecieved;
+	*currentPos = '\0';
+	return clientAddr;
 }
 
 bool HasCommand(char *buffer) {
@@ -174,7 +217,15 @@ string TakeNextCommand(char *buffer) {
 	return cmd;
 }
 
-int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
+int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *clientAddrUDP)
+{
+	vector<Client> *wrapper = new vector<Client>;
+	Client newClient(serverSocket, *(new sockaddr_in));
+	wrapper->push_back(newClient);
+	return ProceedCommand(cmd, 0, wrapper, clientAddrUDP);
+}
+
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *clientAddrUDP) {
 	vector<string> words = split(cmd, ' ');
 	int currentClientSocket = (*clients)[clientIndex].Socket;
 
@@ -184,11 +235,11 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 
 	if (words[0].compare("echo") == 0) {
 		if (cmd.length() > 5)
-			SendString(cmd.substr(5) + '\n', currentClientSocket);
+			SendString(cmd.substr(5) + '\n', currentClientSocket, clientAddrUDP);
 	}
 
 	else if (words[0].compare("time") == 0) {
-		SendString(GetTime() + '\n', currentClientSocket);
+		SendString(GetTime() + '\n', currentClientSocket, clientAddrUDP);
 	}
 
 	else if (words[0].compare("send") == 0)
@@ -206,12 +257,16 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients) {
 	}
 
 	else if (words[0].compare("close") == 0) {
-		CloseConnection(clientIndex, clients);
-		return SHUTDOWN_SOCKET;
+		if (UDP)
+			SendString("Close? Are you seriously?! It's UDP!\n", currentClientSocket, clientAddrUDP);
+		else {
+			CloseConnection(clientIndex, clients);
+			return SHUTDOWN_SOCKET;
+		}
 	}
 
 	else {
-		SendString("Command not found!\n", currentClientSocket);
+		SendString("Command not found!\n", currentClientSocket, clientAddrUDP);
 	}
 
 	return 0;
@@ -331,11 +386,19 @@ void CloseConnection(int clientIndex, vector<Client> *clients) {
 	clients->erase(clients->begin() + clientIndex);
 }
 
-void SendString(string str, int socket) {
+void SendString(string str, int socket, sockaddr *clientAddrUDP) {
 	int bufSize = str.length();
 	char *buf = (char *)calloc(bufSize + 1, 1);
 	strcpy(buf, str.c_str());
-	if (send(socket, buf, bufSize, MSG_DONTROUTE) == -1)
+	int result;
+	if (UDP) {
+		int fromLen = sizeof clientAddrUDP;
+		result = sendto(socket, buf, bufSize, 0, clientAddrUDP, fromLen);
+	}
+	else
+		result = send(socket, buf, bufSize, MSG_DONTROUTE);
+
+	if (result == -1)
 		PrintLastError();
 	free(buf);
 }
