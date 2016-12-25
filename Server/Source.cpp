@@ -2,12 +2,12 @@
 
 const int SHUTDOWN_SOCKET = 2;
 const int MAX_FLAG_STRING_LENGTH = 60;
-const int FILE_BUFFER_SIZE = 10 * 1024 * 1024;
-const int TRANSFER_BLOCK_SIZE = 10 * 1024 * 1024 - 2 * MAX_FLAG_STRING_LENGTH; // - 2*MAX_... to avoid receive buffer overflow
+const int FILE_BUFFER_SIZE = 10 * 1024;
+const int TRANSFER_BLOCK_SIZE = 10 * 1024 - 2 * MAX_FLAG_STRING_LENGTH; // - 2*MAX_... to avoid receive buffer overflow
 const char *END_OF_FILE = "File sent 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_SEND_ERROR = "File send error 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_NOT_FOUND = "File is not found 8bb20328-3a19-4db8-b138-073a48f57f4a";
-const bool UDP = false;
+const bool UDP = true;
 
 #if  defined _WIN32 || defined _WIN64
 const char *STORE_PATH = "../debug/store/";
@@ -77,10 +77,11 @@ void InitServerSocket(int *serverSocket) {
 	}
 #endif
 
-	if (listen(*serverSocket, SOMAXCONN) == SOCKET_ERROR) {
-		PrintLastError();
-		return;
-	}
+	if (!UDP)
+		if (listen(*serverSocket, SOMAXCONN) == SOCKET_ERROR) {
+			PrintLastError();
+			return;
+		}
 }
 
 sockaddr_in GetServerSocketParams() {
@@ -217,15 +218,15 @@ string TakeNextCommand(char *buffer) {
 	return cmd;
 }
 
-int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *clientAddrUDP)
+int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *destAddrUDP)
 {
 	vector<Client> *wrapper = new vector<Client>;
 	Client newClient(serverSocket, *(new sockaddr_in));
 	wrapper->push_back(newClient);
-	return ProceedCommand(cmd, 0, wrapper, clientAddrUDP);
+	return ProceedCommand(cmd, 0, wrapper, destAddrUDP);
 }
 
-int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *clientAddrUDP) {
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *destAddrUDP) {
 	vector<string> words = split(cmd, ' ');
 	int currentClientSocket = (*clients)[clientIndex].Socket;
 
@@ -235,30 +236,30 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockadd
 
 	if (words[0].compare("echo") == 0) {
 		if (cmd.length() > 5)
-			SendString(cmd.substr(5) + '\n', currentClientSocket, clientAddrUDP);
+			SendString(cmd.substr(5) + '\n', currentClientSocket, destAddrUDP);
 	}
 
 	else if (words[0].compare("time") == 0) {
-		SendString(GetTime() + '\n', currentClientSocket, clientAddrUDP);
+		SendString(GetTime() + '\n', currentClientSocket, destAddrUDP);
 	}
 
 	else if (words[0].compare("send") == 0)
 	{
 		if (words.size() > 1) {
-			ReceiveFile(currentClientSocket, words[1]);
+			ReceiveFile(currentClientSocket, words[1], destAddrUDP);
 		}
 	}
 
 	else if (words[0].compare("receive") == 0)
 	{
 		if (words.size() > 1) {
-			SendFile(currentClientSocket, words[1]);
+			SendFile(currentClientSocket, words[1], destAddrUDP);
 		}
 	}
 
 	else if (words[0].compare("close") == 0) {
 		if (UDP)
-			SendString("Close? Are you seriously?! It's UDP!\n", currentClientSocket, clientAddrUDP);
+			SendString("Close? Are you seriously?! It's UDP!\n", currentClientSocket, destAddrUDP);
 		else {
 			CloseConnection(clientIndex, clients);
 			return SHUTDOWN_SOCKET;
@@ -266,21 +267,21 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockadd
 	}
 
 	else {
-		SendString("Command not found!\n", currentClientSocket, clientAddrUDP);
+		SendString("Command not found!\n", currentClientSocket, destAddrUDP);
 	}
 
 	return 0;
 }
 
-void ReceiveFile(int socket, string fileName) {
+void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP) {
 	ofstream file;
 	file.open(STORE_PATH + fileName, ios::binary);
 
 	if (file.is_open()) {
-		SendString("ready\n", socket);
+		SendString("ready\n", socket, destAddrUDP);
 	}
 	else {
-		SendString("Can't open file for writing on server side. Error #" + errno + '\n', socket);
+		SendString("Can't open file for writing on server side. Error #" + errno + '\n', socket, destAddrUDP);
 		return;
 	}
 
@@ -290,18 +291,25 @@ void ReceiveFile(int socket, string fileName) {
 
 	while (!sendingComplete)
 	{
-		unsigned long long recievedBytesCount = recv(socket, fileBuffer, FILE_BUFFER_SIZE, 0);
+		unsigned long long recievedBytesCount = 0;
+		if (UDP) {
+			sockaddr clientAddr;
+			int fromLen = sizeof clientAddr;
+			recievedBytesCount = recvfrom(socket, fileBuffer, FILE_BUFFER_SIZE, 0, &clientAddr, &fromLen);
+		}
+		else
+			recievedBytesCount = recv(socket, fileBuffer, FILE_BUFFER_SIZE, 0);
 		if (Contains(fileBuffer, recievedBytesCount, END_OF_FILE)) {
-			SendString("File sent successfully\n", socket);
+			SendString("File sent successfully\n", socket,destAddrUDP);
 			sendingComplete = true;
 			recievedBytesCount -= strlen(END_OF_FILE);
 		}
 		if (Contains(fileBuffer, recievedBytesCount, FILE_SEND_ERROR)) {
-			SendString("File sending was aborted\n", socket);
+			SendString("File sending was aborted\n", socket,destAddrUDP);
 			break;
 		}
 		else if (recievedBytesCount == SOCKET_ERROR) {
-			SendString("Can't receive file on server side. Error #" + errno + '\n', socket);
+			SendString("Can't receive file on server side. Error #" + errno + '\n', socket,destAddrUDP);
 			PrintLastError();
 			break;
 		}
@@ -314,12 +322,12 @@ void ReceiveFile(int socket, string fileName) {
 	cout << endl << "Receiving complete" << endl;
 }
 
-void SendFile(int socket, string fileName)
+void SendFile(int socket, string fileName, sockaddr *destAddrUDP)
 {
 	ifstream file;
 	file.open(STORE_PATH + fileName, ios::binary);
 	if (!file.is_open()) {
-		SendString(FILE_NOT_FOUND, socket);
+		SendString(FILE_NOT_FOUND, socket,destAddrUDP);
 		return;
 	}
 
@@ -338,11 +346,14 @@ void SendFile(int socket, string fileName)
 		cout << "\r" << file.tellg() << " bytes read";
 		pos = file.tellg();
 		if (length > 0)
-			send(socket, fileBuffer, length, 0);
+			if (UDP)
+				sendto(socket, fileBuffer, length, 0, destAddrUDP, sizeof sockaddr_in);
+			else
+				send(socket, fileBuffer, length, 0);
 	} while (length > 0);
 	file.close();
 
-	SendString(END_OF_FILE, socket);
+	SendString(END_OF_FILE, socket,destAddrUDP);
 
 	free(fileBuffer);
 	cout << endl << "Sending complete\n" << endl;
@@ -386,14 +397,13 @@ void CloseConnection(int clientIndex, vector<Client> *clients) {
 	clients->erase(clients->begin() + clientIndex);
 }
 
-void SendString(string str, int socket, sockaddr *clientAddrUDP) {
+void SendString(string str, int socket, sockaddr *destAddrUDP) {
 	int bufSize = str.length();
 	char *buf = (char *)calloc(bufSize + 1, 1);
 	strcpy(buf, str.c_str());
 	int result;
 	if (UDP) {
-		int fromLen = sizeof clientAddrUDP;
-		result = sendto(socket, buf, bufSize, 0, clientAddrUDP, fromLen);
+		result = sendto(socket, buf, bufSize, 0, destAddrUDP, sizeof sockaddr_in);
 	}
 	else
 		result = send(socket, buf, bufSize, MSG_DONTROUTE);

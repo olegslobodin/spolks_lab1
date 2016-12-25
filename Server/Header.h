@@ -75,23 +75,21 @@ bool HasCommand(char *buffer);
 
 string TakeNextCommand(char *buffer);
 
-int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *clientAddrUDP = NULL);
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *destAddrUDP = NULL);
 
-int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *clientAddrUDP);
+int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *destAddrUDP);
 
-void ReceiveFile(int socket, string fileName);
+void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP = NULL);
 
 bool Contains(char *buffer, int bufferLength, const char *substring);
 
-int Pos(char *buffer, int bufferLength, const char *substring);
-
-void SendFile(int socket, string fileName);
+void SendFile(int socket, string fileName, sockaddr *destAddrUDP = NULL);
 
 int SendSerial(int socket, const char* buffer, int length, int flags);
 
 void CloseConnection(int clientIndex, vector<Client> *clients);
 
-void SendString(string str, int socket, sockaddr *clientAddrUDP = NULL);
+void SendString(string str, int socket, sockaddr *destAddrUDP = NULL);
 
 string GetTime();
 
@@ -102,5 +100,3 @@ void split(const string &s, char delim, vector<string> &elems);
 vector<string> split(const string &s, char delim);
 
 vector<string> split(char *char_string, char delim);
-
-void MyStrcpy(char* dest, char* source, int length);
