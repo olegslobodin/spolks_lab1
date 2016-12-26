@@ -2,12 +2,14 @@
 
 const int SHUTDOWN_SOCKET = 2;
 const int MAX_FLAG_STRING_LENGTH = 60;
-const int FILE_BUFFER_SIZE = 10 * 1024;
-const int TRANSFER_BLOCK_SIZE = 10 * 1024 - 2 * MAX_FLAG_STRING_LENGTH; // - 2*MAX_... to avoid receive buffer overflow
+const int PACKAGE_NUMBER_SIZE = 11;
+const int FILE_BUFFER_SIZE = 6 * 1024;
+const int TRANSFER_BLOCK_SIZE = 6 * 1024 - 2 * MAX_FLAG_STRING_LENGTH; // - 2*MAX_... to avoid receive buffer overflow
 const char *END_OF_FILE = "File sent 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_SEND_ERROR = "File send error 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_NOT_FOUND = "File is not found 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const bool UDP = true;
+SOCKET socketDebug;
 
 #if  defined _WIN32 || defined _WIN64
 const char *STORE_PATH = "../debug/store/";
@@ -54,8 +56,11 @@ int ConfirmWinSocksDll() {
 #endif
 
 void InitServerSocket(int *serverSocket) {
-	if (UDP)
-		*serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
+	if (UDP) {
+		socketDebug = socket(AF_INET, SOCK_DGRAM, 0);
+		*serverSocket = socketDebug;
+		setsockopt(socketDebug, SOL_SOCKET, SO_RCVTIMEO, "100", sizeof("100"));
+	}
 	else
 		*serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (*serverSocket == SOCKET_ERROR) {
@@ -289,6 +294,11 @@ void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP) {
 	unsigned long long totalBytesReceived = 0;
 	bool sendingComplete = false;
 
+	unsigned long packageNumber = 0;
+	unsigned long lastPackageNumber = 0;
+	unsigned long totalLoss = 0;
+	char packageNumberStr[PACKAGE_NUMBER_SIZE];
+
 	while (!sendingComplete)
 	{
 		unsigned long long recievedBytesCount = 0;
@@ -299,20 +309,30 @@ void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP) {
 		}
 		else
 			recievedBytesCount = recv(socket, fileBuffer, FILE_BUFFER_SIZE, 0);
+
 		if (Contains(fileBuffer, recievedBytesCount, END_OF_FILE)) {
-			SendString("File sent successfully\n", socket,destAddrUDP);
+			SendString("File sent successfully\n", socket, destAddrUDP);
 			sendingComplete = true;
 			recievedBytesCount -= strlen(END_OF_FILE);
 		}
 		if (Contains(fileBuffer, recievedBytesCount, FILE_SEND_ERROR)) {
-			SendString("File sending was aborted\n", socket,destAddrUDP);
+			SendString("File sending was aborted\n", socket, destAddrUDP);
 			break;
 		}
 		else if (recievedBytesCount == SOCKET_ERROR) {
-			SendString("Can't receive file on server side. Error #" + errno + '\n', socket,destAddrUDP);
+			SendString("Can't receive file on server side. Error #" + errno + '\n', socket, destAddrUDP);
 			PrintLastError();
 			break;
 		}
+
+		MyStrcpy(packageNumberStr, fileBuffer + recievedBytesCount - PACKAGE_NUMBER_SIZE, PACKAGE_NUMBER_SIZE);
+		packageNumber = strtoul(packageNumberStr, nullptr, 0);
+		if (packageNumber - lastPackageNumber > 1) {
+			totalLoss += packageNumber - lastPackageNumber - 1;
+			cout << lastPackageNumber + 1 << "-" << packageNumber - 1 << "\t Total loss: " << totalLoss << endl;
+		}
+		lastPackageNumber = packageNumber;
+
 		file.write(fileBuffer, recievedBytesCount);
 		totalBytesReceived += recievedBytesCount;
 		cout << "\r" << totalBytesReceived << " bytes received";
@@ -327,7 +347,7 @@ void SendFile(int socket, string fileName, sockaddr *destAddrUDP)
 	ifstream file;
 	file.open(STORE_PATH + fileName, ios::binary);
 	if (!file.is_open()) {
-		SendString(FILE_NOT_FOUND, socket,destAddrUDP);
+		SendString(FILE_NOT_FOUND, socket, destAddrUDP);
 		return;
 	}
 
@@ -353,7 +373,7 @@ void SendFile(int socket, string fileName, sockaddr *destAddrUDP)
 	} while (length > 0);
 	file.close();
 
-	SendString(END_OF_FILE, socket,destAddrUDP);
+	SendString(END_OF_FILE, socket, destAddrUDP);
 
 	free(fileBuffer);
 	cout << endl << "Sending complete\n" << endl;
@@ -461,4 +481,9 @@ vector<string> split(char *char_string, char delim) {
 	vector<string> elems;
 	split(s, delim, elems);
 	return elems;
+}
+
+void MyStrcpy(char* dest, char* source, int length) {
+	for (int i = 0; i < length; i++)
+		dest[i] = source[i];
 }

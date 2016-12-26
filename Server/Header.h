@@ -100,3 +100,5 @@ void split(const string &s, char delim, vector<string> &elems);
 vector<string> split(const string &s, char delim);
 
 vector<string> split(char *char_string, char delim);
+
+void MyStrcpy(char* dest, char* source, int length);
