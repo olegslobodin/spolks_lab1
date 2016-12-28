@@ -102,3 +102,11 @@ vector<string> split(const string &s, char delim);
 vector<string> split(char *char_string, char delim);
 
 void MyStrcpy(char* dest, char* source, int length);
+
+bool AreEqual(char* first, char* second, int length);
+
+int MySelect(int socket);
+
+int SendUDP(SOCKET s, char* buf, int len, sockaddr* to);
+
+int ReceiveUDP(SOCKET s, char* buf, int len, sockaddr* from, int* fromlen);
