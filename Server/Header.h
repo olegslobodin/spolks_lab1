@@ -107,6 +107,6 @@ bool AreEqual(char* first, char* second, int length);
 
 int MySelect(int socket);
 
-int SendUDP(SOCKET s, char* buf, int len, sockaddr* to);
+int SendUDP(int s, char* buf, int len, sockaddr* to);
 
-int ReceiveUDP(SOCKET s, char* buf, int len, sockaddr* from, int* fromlen);
+int ReceiveUDP(int s, char* buf, int len, sockaddr* from, socklen_t* fromlen);
