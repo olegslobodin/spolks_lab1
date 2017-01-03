@@ -12,7 +12,7 @@ char outPackageNumberStr[PACKAGE_NUMBER_SIZE];
 const char *END_OF_FILE = "File sent 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_SEND_ERROR = "File send error 8bb20328-3a19-4db8-b138-073a48f57f4a";
 const char *FILE_NOT_FOUND = "File is not found 8bb20328-3a19-4db8-b138-073a48f57f4a";
-const bool UDP = false;
+const bool UDP = true;
 
 #if  defined _WIN32 || defined _WIN64
 const char *STORE_PATH = "../debug/store/";
@@ -165,7 +165,7 @@ void CommandCycleUDP(int serverSocket) {
     char *buffer = (char *) calloc(Client::BUFFER_SIZE, 1);
 
     while (!breakCycle) {
-        sockaddr clientAddr = InputCommandUDP(buffer, serverSocket);
+        sockaddr_in clientAddr = InputCommandUDP(buffer, serverSocket);
         while (HasCommand(buffer)) {
             string cmd = TakeNextCommand(buffer);
             cout << cmd << endl;
@@ -192,20 +192,19 @@ void InputCommand(char *buffer, int clientSocket) {
     *currentPos = '\0';
 }
 
-sockaddr InputCommandUDP(char *buffer, int clientSocket) {
+sockaddr_in InputCommandUDP(char *buffer, int clientSocket) {
     //find position of line ending
     char *currentPos = strchr(buffer, '\0');
     if (currentPos == NULL)
         currentPos = buffer;
-    sockaddr clientAddr;
+    sockaddr_in clientAddr;
     socklen_t fromLen = sizeof clientAddr;
     memset(&clientAddr, 0, fromLen);
 
-    int bytesRecieved = ReceiveUDP(clientSocket, currentPos, Client::BUFFER_SIZE - (currentPos - buffer), &clientAddr,
-                                   &fromLen);
+    int bytesRecieved = ReceiveUDP(clientSocket, currentPos, Client::BUFFER_SIZE - (currentPos - buffer), &clientAddr, &fromLen);
     if (bytesRecieved == SOCKET_ERROR) {
         buffer[0] = '\0';
-        return *(new sockaddr);
+        return *(new sockaddr_in);
     }
     currentPos += bytesRecieved;
     *currentPos = '\0';
@@ -226,14 +225,14 @@ string TakeNextCommand(char *buffer) {
     return cmd;
 }
 
-int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *destAddrUDP) {
+int ProceedCommandUDP(string cmd, int serverSocket, sockaddr_in *destAddrUDP) {
     vector<Client> *wrapper = new vector<Client>;
     Client newClient(serverSocket, *(new sockaddr_in));
     wrapper->push_back(newClient);
     return ProceedCommand(cmd, 0, wrapper, destAddrUDP);
 }
 
-int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *destAddrUDP) {
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr_in *destAddrUDP) {
     vector<string> words = split(cmd, ' ');
     int currentClientSocket = (*clients)[clientIndex].Socket;
 
@@ -269,7 +268,7 @@ int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockadd
     return 0;
 }
 
-void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP) {
+void ReceiveFile(int socket, string fileName, sockaddr_in *destAddrUDP) {
     ofstream file;
     file.open(STORE_PATH + fileName, ios::binary);
 
@@ -287,7 +286,7 @@ void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP) {
     while (!sendingComplete) {
         unsigned long long recievedBytesCount = 0;
         if (UDP) {
-            sockaddr clientAddr;
+            sockaddr_in clientAddr;
             socklen_t fromLen = sizeof clientAddr;
             memset(&clientAddr, 0, fromLen);
             recievedBytesCount = ReceiveUDP(socket, fileBuffer, FILE_BUFFER_SIZE, &clientAddr, &fromLen);
@@ -317,7 +316,7 @@ void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP) {
     cout << endl << "Receiving complete" << endl;
 }
 
-void SendFile(int socket, string fileName, sockaddr *destAddrUDP) {
+void SendFile(int socket, string fileName, sockaddr_in *destAddrUDP) {
     ifstream file;
     file.open(STORE_PATH + fileName, ios::binary);
     if (!file.is_open()) {
@@ -336,7 +335,7 @@ void SendFile(int socket, string fileName, sockaddr *destAddrUDP) {
             length = fileSize - pos;
         else
             length = TRANSFER_BLOCK_SIZE;
-        if (length > 0)
+        if (length > 0){
             file.read(fileBuffer, length);
             cout << "\r" << file.tellg() << " bytes read";
             pos = file.tellg();
@@ -345,6 +344,7 @@ void SendFile(int socket, string fileName, sockaddr *destAddrUDP) {
                 SendUDP(socket, fileBuffer, length, destAddrUDP);
             } else
                 send(socket, fileBuffer, length, 0);
+        }
     } while (length > 0);
     file.close();
 
@@ -389,7 +389,7 @@ void CloseConnection(int clientIndex, vector<Client> *clients) {
     clients->erase(clients->begin() + clientIndex);
 }
 
-void SendString(string str, int socket, sockaddr *destAddrUDP) {
+void SendString(string str, int socket, sockaddr_in *destAddrUDP) {
     int bufSize = str.length();
     if(UDP)
         bufSize += PACKAGE_NUMBER_SIZE;
@@ -470,7 +470,6 @@ bool AreEqual(char *first, char *second, int length) {
 
 int MySelect(int socket) {
     fd_set fds;
-    int n;
     struct timeval tv;
 
     // Set up the file descriptor set.
@@ -482,11 +481,11 @@ int MySelect(int socket) {
     tv.tv_usec = (TIMEOUT_MS % 1000) * 1000;
 
     // Wait until timeout or data received.
-    return select(socket, &fds, NULL, NULL, &tv);
+    return select(socket + 1, &fds, NULL, NULL, &tv);
 }
 
 //buffer must have free PACKAGE_NUMBER_SIZE bytes at the end to insert package number
-int SendUDP(int s, char *buf, int len, sockaddr *to) {
+int SendUDP(int s, char *buf, int len, sockaddr_in *to) {
 #if  defined _WIN32 || defined _WIN64
     _ultoa(outPackageNumber, buf + len - PACKAGE_NUMBER_SIZE, 10);
 #elif defined __linux__
@@ -494,7 +493,7 @@ int SendUDP(int s, char *buf, int len, sockaddr *to) {
 #endif
     socklen_t fromLen = sizeof *to;
     while (true) {
-        if (sendto(s, buf, (size_t) len, 0, to, fromLen) == -1)
+        if (sendto(s, buf, (size_t) len, 0, (sockaddr*) to, fromLen) == -1)
             return -1;
         switch (MySelect(s)) {
             case -1:
@@ -504,7 +503,7 @@ int SendUDP(int s, char *buf, int len, sockaddr *to) {
             default:
                 break;
         }
-        while (recvfrom(s, outPackageNumberStr, PACKAGE_NUMBER_SIZE, 0, to, &fromLen) == -1);
+        while (recvfrom(s, outPackageNumberStr, PACKAGE_NUMBER_SIZE, 0, (sockaddr*) to, &fromLen) == -1);
         if (AreEqual(outPackageNumberStr, buf + len - PACKAGE_NUMBER_SIZE, PACKAGE_NUMBER_SIZE))
             break;
     }
@@ -512,15 +511,15 @@ int SendUDP(int s, char *buf, int len, sockaddr *to) {
     return 0;
 }
 
-int ReceiveUDP(int s, char *buf, int len, sockaddr *from, socklen_t *fromlen) {
+int ReceiveUDP(int s, char *buf, int len, sockaddr_in *from, socklen_t *fromlen) {
     int receivedBytesCount = 0;
     bool accepted = false;
     while (!accepted) {
-        receivedBytesCount = recvfrom(s, buf, len, 0, from, fromlen);
+        receivedBytesCount = recvfrom(s, buf, len, 0, (sockaddr*) from, fromlen);
         if (receivedBytesCount == -1)
             return -1;
         receivedBytesCount -= PACKAGE_NUMBER_SIZE;
-        if (sendto(s, buf + receivedBytesCount, PACKAGE_NUMBER_SIZE, 0, from, *fromlen) == -1)
+        if (sendto(s, buf + receivedBytesCount, PACKAGE_NUMBER_SIZE, 0, (sockaddr*) from, *fromlen) == -1)
             return -1;
         if (!AreEqual(inPackageNumberStr, buf + receivedBytesCount, PACKAGE_NUMBER_SIZE))
             accepted = true;

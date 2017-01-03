@@ -69,27 +69,27 @@ void CommandCycleUDP(int serverSocket);
 
 void InputCommand(char *recvBuffer, int clientSocket);
 
-sockaddr InputCommandUDP(char *buffer, int clientSocket);
+sockaddr_in InputCommandUDP(char *buffer, int clientSocket);
 
 bool HasCommand(char *buffer);
 
 string TakeNextCommand(char *buffer);
 
-int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr *destAddrUDP = NULL);
+int ProceedCommand(string cmd, int clientIndex, vector<Client> *clients, sockaddr_in *destAddrUDP = NULL);
 
-int ProceedCommandUDP(string cmd, int serverSocket, sockaddr *destAddrUDP);
+int ProceedCommandUDP(string cmd, int serverSocket, sockaddr_in *destAddrUDP);
 
-void ReceiveFile(int socket, string fileName, sockaddr *destAddrUDP = NULL);
+void ReceiveFile(int socket, string fileName, sockaddr_in *destAddrUDP = NULL);
 
 bool Contains(char *buffer, int bufferLength, const char *substring);
 
-void SendFile(int socket, string fileName, sockaddr *destAddrUDP = NULL);
+void SendFile(int socket, string fileName, sockaddr_in *destAddrUDP = NULL);
 
 int SendSerial(int socket, const char* buffer, int length, int flags);
 
 void CloseConnection(int clientIndex, vector<Client> *clients);
 
-void SendString(string str, int socket, sockaddr *destAddrUDP = NULL);
+void SendString(string str, int socket, sockaddr_in *destAddrUDP = NULL);
 
 string GetTime();
 
@@ -107,6 +107,6 @@ bool AreEqual(char* first, char* second, int length);
 
 int MySelect(int socket);
 
-int SendUDP(int s, char* buf, int len, sockaddr* to);
+int SendUDP(int s, char* buf, int len, sockaddr_in* to);
 
-int ReceiveUDP(int s, char* buf, int len, sockaddr* from, socklen_t* fromlen);
+int ReceiveUDP(int s, char* buf, int len, sockaddr_in* from, socklen_t* fromlen);
